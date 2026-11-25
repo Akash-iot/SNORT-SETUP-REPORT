@@ -1,0 +1,94 @@
+#-----------------------------------------------------------------------------
+# local.rules — starter custom rule set for Snort
+#
+# Drop this file into /etc/snort/rules/local.rules (or merge these lines into
+# your existing local.rules) and make sure snort.conf / snort.lua includes it:
+#   include $RULE_PATH/local.rules
+#
+# Every rule needs a unique sid >= 1000000 (below that range is reserved for
+# official Snort/community rules). Test with: sudo snort -T -c /etc/snort/snort.conf
+#-----------------------------------------------------------------------------
+
+# ============================================================
+# ICMP / Ping detection
+# ============================================================
+
+# Any inbound ping
+alert icmp any any -> $HOME_NET any (msg:"ICMP ping detected"; itype:8; sid:1000001; rev:1;)
+
+# Ping reply leaving your network (confirms a host responded)
+alert icmp $HOME_NET any -> any any (msg:"ICMP ping reply sent"; itype:0; sid:1000002; rev:1;)
+
+# Large/oversized ping packet — classic ping-flood or ping-of-death style probe
+alert icmp any any -> $HOME_NET any (msg:"Large ICMP packet - possible ping flood"; dsize:>800; sid:1000003; rev:1;)
+
+# Rapid repeated pings from the same source (basic ICMP flood / sweep detection)
+alert icmp any any -> $HOME_NET any (msg:"Possible ICMP flood - high ping rate"; itype:8; detection_filter:track by_src, count 10, seconds 5; sid:1000004; rev:1;)
+
+
+# ============================================================
+# TCP / Port scan detection
+# ============================================================
+
+# SYN scan / stealth scan attempt (SYN flag only, no ACK — typical of nmap -sS)
+alert tcp any any -> $HOME_NET any (msg:"Possible SYN port scan"; flags:S; detection_filter:track by_src, count 20, seconds 5; sid:1000010; rev:1;)
+
+# NULL scan (no flags set — used to evade basic detection)
+alert tcp any any -> $HOME_NET any (msg:"NULL scan detected"; flags:0; sid:1000011; rev:1;)
+
+# XMAS scan (FIN, PSH, URG all set — another stealth scan technique)
+alert tcp any any -> $HOME_NET any (msg:"XMAS scan detected"; flags:FPU; sid:1000012; rev:1;)
+
+# FIN scan (FIN flag only, no prior handshake)
+alert tcp any any -> $HOME_NET any (msg:"FIN scan detected"; flags:F; sid:1000013; rev:1;)
+
+# Generic inbound connection attempt to a commonly targeted high port range
+alert tcp any any -> $HOME_NET 1024:65535 (msg:"Inbound connection to high port range"; flags:S; sid:1000014; rev:1;)
+
+
+# ============================================================
+# FTP (port 21) monitoring
+# ============================================================
+
+# Any new FTP control connection attempt
+alert tcp any any -> $HOME_NET 21 (msg:"FTP connection attempt"; flags:S; sid:1000020; rev:1;)
+
+# Anonymous FTP login attempt
+alert tcp any any -> $HOME_NET 21 (msg:"FTP anonymous login attempt"; content:"USER anonymous"; nocase; sid:1000021; rev:1;)
+
+# Root login attempt over FTP (should never happen — high severity)
+alert tcp any any -> $HOME_NET 21 (msg:"FTP root login attempt"; content:"USER root"; nocase; sid:1000022; rev:1;)
+
+# Repeated failed FTP logins from same source — possible brute force
+alert tcp any any -> $HOME_NET 21 (msg:"Possible FTP brute force - repeated login attempts"; content:"USER"; nocase; detection_filter:track by_src, count 5, seconds 20; sid:1000023; rev:1;)
+
+# FTP "PASS" command sent in cleartext (informational — FTP has no encryption by default)
+alert tcp any any -> $HOME_NET 21 (msg:"FTP password sent in cleartext"; content:"PASS"; nocase; sid:1000024; rev:1;)
+
+
+# ============================================================
+# SSH (port 22) monitoring
+# ============================================================
+
+alert tcp any any -> $HOME_NET 22 (msg:"SSH connection attempt"; flags:S; sid:1000030; rev:1;)
+
+# Repeated SSH connection attempts from same source — possible brute force
+alert tcp any any -> $HOME_NET 22 (msg:"Possible SSH brute force"; flags:S; detection_filter:track by_src, count 5, seconds 20; sid:1000031; rev:1;)
+
+
+# ============================================================
+# HTTP (port 80) — basic examples
+# ============================================================
+
+# Detect suspicious User-Agent commonly used by scanning tools
+alert tcp any any -> $HOME_NET 80 (msg:"Suspicious User-Agent - possible scanner"; content:"User-Agent|3A| nmap"; nocase; sid:1000040; rev:1;)
+
+# Basic SQL injection attempt pattern in URI
+alert tcp any any -> $HOME_NET 80 (msg:"Possible SQL injection attempt"; content:"union select"; nocase; http_uri; sid:1000041; rev:1;)
+
+
+# ============================================================
+# DNS (port 53) monitoring
+# ============================================================
+
+alert udp any any -> $HOME_NET 53 (msg:"DNS query received"; sid:1000050; rev:1;)
